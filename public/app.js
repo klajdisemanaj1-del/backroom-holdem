@@ -92,8 +92,8 @@ window.addEventListener('hashchange', route);
 
 /* ---------- Auth ---------- */
 function renderAuth() {
-  $('#auth-title').textContent = App.setup ? 'Create the admin account' : 'Hyr';
-  $('#a-go').textContent = App.setup ? 'Create admin' : 'Hyr';
+  $('#auth-title').textContent = App.setup ? 'Create the admin account' : 'Hyr / Log in';
+  $('#a-go').textContent = App.setup ? 'Create admin' : 'Hyr / Log in';
   $('#auth-note').textContent = App.setup
     ? 'This is a new club. The account you create now runs it: players, chips and tables.'
     : '';
