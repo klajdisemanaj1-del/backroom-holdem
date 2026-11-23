@@ -433,6 +433,7 @@ function applyBJ(st, initial) {
 function bjCard(key, c, extra) {
   const B = App.bj, isNew = !B.seen.has(key);
   B.seen.add(key);
+  if (isNew && App.view === 'bj') dealerLean();
   if (B.seen.size > 400) B.seen = new Set([key]);
   const cls = (isNew ? 'deal ' : '') + (extra || '');
   return c < 0 ? `<div class="card back ${cls}"></div>` : cardHTML(c, cls);
@@ -443,6 +444,7 @@ function renderBJ() {
   setHTML($('#bj-bal'), st ? `<span class="chip"></span>${money(B.walletShown != null ? B.walletShown : st.wallet)}` : '');
   $('#bj-meta').textContent = st ? `Bets ${money(st.min)}–${money(st.max)}` : '';
   if (!H) {
+    $('#bj-fig').classList.remove('f-win', 'f-lose');
     setHTML($('#bj-dcards'), ''); $('#bj-dt').textContent = '';
     setHTML($('#bj-hands'), '<div class="bj-place">Place your bet</div>');
     setHTML($('#bj-msg'), '');
@@ -477,7 +479,17 @@ function renderBJ() {
     else msg = `<span>${H.dealerBJ ? 'Dealer has blackjack' : allBust ? 'Bust' : 'Dealer wins'}</span>`;
   } else if (B.revealing) msg = '<span class="quiet">Dealer plays…</span>';
   setHTML($('#bj-msg'), msg);
+  // Dealer's mood: happy when the player wins, a shrug when the house wins.
+  const fig = $('#bj-fig'), net = H.payout - H.staked;
+  fig.classList.toggle('f-win', showRes && net > 0);
+  fig.classList.toggle('f-lose', showRes && net < 0);
   renderBJDock();
+}
+function dealerLean() {
+  const fig = $('#bj-fig');
+  if (!fig) return;
+  fig.classList.remove('f-deal'); void fig.offsetWidth; fig.classList.add('f-deal');
+  clearTimeout(dealerLean.t); dealerLean.t = setTimeout(() => fig.classList.remove('f-deal'), 500);
 }
 function renderBJDock() {
   const B = App.bj, st = B.st, H = st && st.hand, dock = $('#bj-dock');

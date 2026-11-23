@@ -453,3 +453,32 @@ button.ritem:hover { border-color: #4a3d41; }
 .bj-cards .card b { font-size: calc(var(--cw) * .42); }
 .bj-cards .card i { font-size: calc(var(--cw) * .34); margin-left: 1px; }
 .bj-cards .card.back { padding: 0; }
+
+/* ---------- Blackjack dealer ---------- */
+#bj-arena { flex-direction: column; align-items: stretch; }
+.bj-fig { flex: none; align-self: center; height: clamp(90px, 21vh, 180px); aspect-ratio: 200 / 246; margin-bottom: -16px; position: relative; z-index: 0; }
+.bj-fig svg { width: 100%; height: 100%; display: block; overflow: visible; transform-origin: 50% 100%; }
+.bj-felt { z-index: 1; }
+.bj-fig .f-body { animation: f-breathe 3.6s ease-in-out infinite; }
+.bj-fig .f-lid { transform-box: fill-box; transform-origin: center top; transform: scaleY(0); animation: f-blink 4.5s infinite; }
+.bj-fig .f-joy, .bj-fig .f-grin, .bj-fig .f-meh { display: none; }
+.bj-fig.f-win .f-eyes, .bj-fig.f-win .f-smile { display: none; }
+.bj-fig.f-win .f-joy, .bj-fig.f-win .f-grin { display: inline; }
+.bj-fig.f-win svg { animation: f-hop .6s ease-out; }
+.bj-fig.f-lose .f-smile { display: none; }
+.bj-fig.f-lose .f-meh { display: inline; }
+.bj-fig.f-lose .f-brows { transform: translateY(-3px); }
+.bj-fig.f-lose .f-body { animation: f-shrug .7s ease-in-out 1; }
+.bj-fig.f-deal svg { animation: f-lean .45s ease-out; }
+@keyframes f-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1.6px); } }
+@keyframes f-blink { 0%, 92%, 100% { transform: scaleY(0); } 95% { transform: scaleY(1); } }
+@keyframes f-lean { 0% { transform: none; } 45% { transform: rotate(-3deg) translateY(3px); } 100% { transform: none; } }
+@keyframes f-hop { 0% { transform: none; } 40% { transform: translateY(-6px); } 100% { transform: none; } }
+@keyframes f-shrug { 0%, 100% { transform: translateY(0); } 40%, 60% { transform: translateY(-5px); } }
+@media (max-height: 720px) {
+  .bj-fig { height: clamp(80px, 16vh, 130px); }
+  .bj-cards .card { --cw: 46px !important; }
+  .bj-hands { min-height: 118px; }
+  .bj-felt { padding-top: 12px; padding-bottom: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .bj-fig .f-lid { animation: none; transform: scaleY(0); } }
