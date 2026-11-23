@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Backroom Hold'em server: No-Limit Hold'em cash tables with a neutral server-side dealer,
+ * Poker888 server: No-Limit Hold'em cash tables with a neutral server-side dealer,
  * admin-created accounts, a chip cashier and a house fee. Node 18+, no dependencies.
  */
 const http = require('http');
@@ -692,5 +692,5 @@ process.on('SIGINT', () => { flushDb(); process.exit(0); });
 if (process.env.RAILWAY_ENVIRONMENT && !process.env.DATA_DIR && !process.env.RAILWAY_VOLUME_MOUNT_PATH) {
   console.warn('WARNING: no volume attached. Players and balances will be lost on every restart. Attach a volume to this service.');
 }
-bootstrapAdmin().then(() => server.listen(PORT, () => console.log(`Backroom Hold'em is running on port ${PORT}, saving data in ${DATA_DIR}`)))
+bootstrapAdmin().then(() => server.listen(PORT, () => console.log(`Poker888 is running on port ${PORT}, saving data in ${DATA_DIR}`)))
   .catch(e => { console.error('Could not create the admin account:', e.message); process.exit(1); });

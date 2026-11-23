@@ -1,5 +1,5 @@
 'use strict';
-/* Backroom Hold'em web app: login, lobby, table, account and admin. Talks to server.js. */
+/* Poker888 web app: login, lobby, table, account and admin. Talks to server.js. */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -8,7 +8,7 @@ const signed = c => (c > 0 ? '+' : c < 0 ? '−' : '') + money(Math.abs(c));
 const RANK_CH = ['', '', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const SUIT_CH = ['♠', '♥', '♦', '♣'];
 const rankOf = c => (c % 13) + 2, suitOf = c => Math.floor(c / 13);
-const COLORS = ['#f2b631', '#7cc3a6', '#e38a6a', '#97b2e8', '#d39ad6', '#c7d27a', '#76c1d8', '#eaa0a0', '#b3a4f0'];
+const COLORS = ['#e8e3e4', '#ff6b7a', '#c9c2c4', '#f29aa4', '#9f989b', '#ffb3bb', '#d8d0d2', '#e05566', '#bfb6b9'];
 const TYPE_NM = { deposit: 'Transfer in', withdraw: 'Withdrawal', buyin: 'Buy-in', cashout: 'Cash-out' };
 const BLINDS = [[0.1, 0.2], [0.25, 0.5], [0.5, 1], [1, 2], [2, 5], [5, 10], [10, 20]];
 

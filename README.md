@@ -1,4 +1,4 @@
-# Backroom Hold'em
+# Poker888
 
 A private No-Limit Texas Hold'em club. The server is the dealer: it shuffles, deals and runs every table on its own, so games keep going with nobody's phone acting as host. Each player only ever receives their own cards. The admin doesn't see any cards either, until showdown.
 
