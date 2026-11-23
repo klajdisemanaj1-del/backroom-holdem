@@ -34,7 +34,7 @@ Any service that runs a Node.js app works, for example Render, Railway, Fly.io o
 2. Set the start command to `node server.js`.
 3. Set these environment variables:
    - `ADMIN_USERNAME` and `ADMIN_PASSWORD`: your admin login, created on first start. Set these so nobody else can claim the admin account before you do.
-   - `DATA_DIR`: a folder on a **persistent disk or volume**. All players, balances and history live in `DATA_DIR/db.json`. If the disk isn't persistent, everything resets when the app restarts.
+   - `DATA_DIR`: a folder on a **persistent disk or volume**. On Railway you can skip this: attach a volume and the server finds it automatically. All players, balances and history live in `DATA_DIR/db.json`. If the disk isn't persistent, everything resets when the app restarts.
    - `TZ` (optional): time zone for the daily fee report. The default is `Europe/Tirane`.
    - `PORT` is usually set by the host automatically.
 4. Make sure the site is served over **https**. Most hosts do this automatically.

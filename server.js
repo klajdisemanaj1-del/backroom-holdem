@@ -12,7 +12,7 @@ const { E, newState, newSeat, evalBest, handName, startingHandName, money } = re
 
 const scrypt = promisify(crypto.scrypt);
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const PUBLIC = path.join(__dirname, 'public');
 const TZ = process.env.TZ || 'Europe/Tirane';
@@ -689,5 +689,8 @@ setInterval(() => {
 
 process.on('SIGTERM', () => { flushDb(); process.exit(0); });
 process.on('SIGINT', () => { flushDb(); process.exit(0); });
-bootstrapAdmin().then(() => server.listen(PORT, () => console.log(`Backroom Hold'em is running on http://localhost:${PORT}`)))
+if (process.env.RAILWAY_ENVIRONMENT && !process.env.DATA_DIR && !process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+  console.warn('WARNING: no volume attached. Players and balances will be lost on every restart. Attach a volume to this service.');
+}
+bootstrapAdmin().then(() => server.listen(PORT, () => console.log(`Backroom Hold'em is running on port ${PORT}, saving data in ${DATA_DIR}`)))
   .catch(e => { console.error('Could not create the admin account:', e.message); process.exit(1); });
