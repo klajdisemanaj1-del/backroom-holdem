@@ -377,3 +377,4 @@ button.ritem:hover { border-color: #4a3d41; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+.note:empty { display: none; }
