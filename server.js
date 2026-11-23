@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { promisify } = require('util');
 const { E, newState, newSeat, evalBest, handName, startingHandName, money } = require('./engine');
+const { BJ } = require('./blackjack');
 
 const scrypt = promisify(crypto.scrypt);
 const PORT = Number(process.env.PORT) || 3000;
@@ -31,6 +32,7 @@ function freshDb() {
     users: {}, sessions: {}, ledger: [], tables: {}, requests: {},
     totals: { deposits: 0, withdrawals: 0 },
     rake: { total: 0, byDay: {}, byTable: {}, recent: [] },
+    bj: {}, casino: { bjOn: true, bjMin: 100, bjMax: 50000, stats: { hands: 0, wagered: 0, paid: 0, byDay: {} } },
     seq: { ledger: 0 }, created: Date.now()
   };
 }
@@ -299,7 +301,7 @@ function tableView(T, u) {
 }
 function lobbyFor(u) {
   return {
-    me: pubUser(u),
+    me: pubUser(u), casino: { bjOn: !!db.casino.bjOn },
     tables: openTables().sort((a, b) => a.created - b.created).map(T => ({
       id: T.id, label: label(T), cfg: pubCfg(T.cfg), endsAt: T.endsAt, closing: !!T.closing,
       seated: T.state.seats.filter(Boolean).length, playing: E.live(T.state),
@@ -319,13 +321,20 @@ function overview() {
   });
   const wallets = users.reduce((a, u) => a + u.wallet, 0);
   const issued = db.totals.deposits - db.totals.withdrawals;
+  const cs = db.casino.stats;
+  const bjOpen = Object.values(db.bj).reduce((a, P) => a + (P.hand && P.hand.phase !== 'done' ? P.hand.staked : 0), 0);
+  const bjNet = cs.wagered - cs.paid;
   const days = [];
   for (let k = 13; k >= 0; k--) { const d = dayKey(Date.now() - k * 864e5); days.push({ day: d, amt: db.rake.byDay[d] || 0 }); }
   return {
     totals: {
       deposits: db.totals.deposits, withdrawals: db.totals.withdrawals, issued, wallets, tables: tableChips,
-      rake: db.rake.total, today: db.rake.byDay[dayKey()] || 0, balanced: issued === wallets + tableChips + db.rake.total
+      rake: db.rake.total, today: db.rake.byDay[dayKey()] || 0,
+      bjOpen, bjNet, bjToday: cs.byDay[dayKey()] || 0,
+      balanced: issued === wallets + tableChips + db.rake.total + bjOpen + bjNet
     },
+    casino: { bjOn: db.casino.bjOn, bjMin: db.casino.bjMin, bjMax: db.casino.bjMax, hands: cs.hands, wagered: cs.wagered, paid: cs.paid,
+      days: days.map(x => ({ day: x.day, amt: cs.byDay[x.day] || 0 })) },
     users: users.filter(u => u.role === 'player').sort((a, b) => a.username.localeCompare(b.username)).map(u => ({
       id: u.id, username: u.username, wallet: u.wallet, onTable: onTable[u.id] || 0, at: at[u.id] || [],
       disabled: u.disabled, created: u.created, lastLogin: u.lastLogin, online: [...clients].some(c => c.uid === u.id)
@@ -495,6 +504,70 @@ POST['/api/table/leave'] = ({ user, body }) => {
   return { ok: true, later: !!(T.state.seats[i] && T.state.seats[i].lv) };
 };
 
+/* ---- Blackjack ---- */
+const bjRec = u => (db.bj[u.id] = db.bj[u.id] || { shoe: null, hand: null, n: 0, lastBet: 0 });
+function bjView(u) {
+  const P = bjRec(u), H = P.hand, c = db.casino;
+  const out = { on: !!c.bjOn, min: c.bjMin, max: c.bjMax, wallet: u.wallet, lastBet: P.lastBet || 0, hand: null };
+  if (!H) return out;
+  const done = H.phase === 'done';
+  const dealer = done ? H.dealer : [H.dealer[0], -1];
+  const h = H.hands[H.active];
+  out.hand = {
+    id: H.id, phase: H.phase, bet: H.bet, ins: H.ins, staked: H.staked, payout: H.payout, shuffled: !!H.shuffled, dealerBJ: !!H.dealerBJ,
+    dealer, dealerTotal: BJ.total(dealer).t, active: H.active,
+    hands: H.hands.map(x => { const t = BJ.total(x.cards); return { cards: x.cards, bet: x.bet, total: t.t, soft: t.soft, done: x.done, res: x.res, pay: x.pay, dbl: x.dbl }; }),
+    canDouble: BJ.canDouble(H) && u.wallet >= h.bet, canSplit: BJ.canSplit(H) && u.wallet >= h.bet,
+    insCost: Math.floor(H.bet / 2), canIns: H.phase === 'insurance' && u.wallet >= Math.floor(H.bet / 2)
+  };
+  return out;
+}
+function bjFinish(u, P) {
+  const H = P.hand;
+  if (H.phase !== 'done' || H.booked) return;
+  H.booked = true;
+  const cs = db.casino.stats, d = dayKey();
+  cs.hands++; cs.wagered += H.staked; cs.paid += H.payout;
+  cs.byDay[d] = (cs.byDay[d] || 0) + (H.staked - H.payout);
+  const res = H.hands.map(h => ({ bj: 'Blackjack', win: 'Win', push: 'Push', lose: 'Lose', bust: 'Bust' }[h.res] || h.res)).join(', ');
+  move(u, H.payout, 'blackjack', { note: `Bet ${money(H.staked)} · ${res}`, amount: H.payout - H.staked });
+  dirty.admin = true; schedule();
+}
+GET['/api/bj'] = ({ user }) => bjView(needPlayer(user));
+POST['/api/bj/deal'] = ({ user, body }) => {
+  const u = needPlayer(user), c = db.casino, P = bjRec(u);
+  if (!c.bjOn) bad('Blackjack is closed right now.');
+  if (P.hand && P.hand.phase !== 'done') bad('Finish your current hand first.');
+  const bet = cents(body.bet, 'bet');
+  if (bet < c.bjMin || bet > c.bjMax) bad(`Bets are ${money(c.bjMin)} to ${money(c.bjMax)}.`);
+  if (bet > u.wallet) bad(`Your balance is ${money(u.wallet)}.`);
+  u.wallet -= bet; P.lastBet = bet;
+  BJ.deal(P, bet);
+  bjFinish(u, P);
+  dirty.users.add(u.id); save(); schedule();
+  return bjView(u);
+};
+POST['/api/bj/act'] = ({ user, body }) => {
+  const u = needPlayer(user), P = bjRec(u), H = P.hand;
+  if (!H || H.phase === 'done') bad('Place a bet to start a hand.');
+  const a = String(body.a);
+  if (H.phase === 'insurance') {
+    if (a !== 'ins' && a !== 'noins') bad('Answer the insurance question first.');
+    if (a === 'ins') { const cost = Math.floor(H.bet / 2); if (cost > u.wallet) bad('Not enough chips for insurance.'); u.wallet -= cost; }
+    BJ.insurance(P, a === 'ins');
+  } else {
+    const h = BJ.cur(H);
+    if (a === 'hit') BJ.hit(P);
+    else if (a === 'stand') BJ.stand(P);
+    else if (a === 'double') { if (!BJ.canDouble(H)) bad("You can't double now."); if (h.bet > u.wallet) bad('Not enough chips to double.'); u.wallet -= h.bet; BJ.double(P); }
+    else if (a === 'split') { if (!BJ.canSplit(H)) bad("You can't split now."); if (h.bet > u.wallet) bad('Not enough chips to split.'); u.wallet -= h.bet; BJ.split(P); }
+    else bad('Unknown move.');
+  }
+  bjFinish(u, P);
+  dirty.users.add(u.id); save(); schedule();
+  return bjView(u);
+};
+
 /* ---- Admin ---- */
 GET['/api/admin/overview'] = ({ user }) => { needAdmin(user); return overview(); };
 GET['/api/admin/ledger'] = ({ user, url }) => {
@@ -556,6 +629,15 @@ POST['/api/admin/withdraw'] = ({ user, body }) => {
   move(u, -amt, 'withdraw', { by: admin.username, note: String(body.note || '').slice(0, 80) });
   notify(u.id, `${money(amt)} chips were withdrawn from your balance.`);
   return { ok: true, wallet: u.wallet };
+};
+POST['/api/admin/casino'] = ({ user, body }) => {
+  needAdmin(user);
+  const c = db.casino;
+  const min = cents(body.bjMin, 'minimum bet'), max = cents(body.bjMax, 'maximum bet');
+  if (max < min) bad('The maximum bet must be at least the minimum.');
+  Object.assign(c, { bjOn: !!body.bjOn, bjMin: min, bjMax: max });
+  dirty.lobby = true; dirty.admin = true; save(); schedule();
+  return { ok: true };
 };
 POST['/api/admin/tables'] = ({ user, body }) => {
   needAdmin(user);

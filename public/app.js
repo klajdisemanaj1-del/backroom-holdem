@@ -9,13 +9,14 @@ const RANK_CH = ['', '', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q',
 const SUIT_CH = ['♠', '♥', '♦', '♣'];
 const rankOf = c => (c % 13) + 2, suitOf = c => Math.floor(c / 13);
 const COLORS = ['#e8e3e4', '#ff6b7a', '#c9c2c4', '#f29aa4', '#9f989b', '#ffb3bb', '#d8d0d2', '#e05566', '#bfb6b9'];
-const TYPE_NM = { deposit: 'Transfer in', withdraw: 'Withdrawal', buyin: 'Buy-in', cashout: 'Cash-out' };
+const TYPE_NM = { deposit: 'Transfer in', withdraw: 'Withdrawal', buyin: 'Buy-in', cashout: 'Cash-out', blackjack: 'Blackjack' };
 const BLINDS = [[0.1, 0.2], [0.25, 0.5], [0.5, 1], [1, 2], [2, 5], [5, 10], [10, 20]];
 
 const App = {
   user: null, setup: false, view: 'auth', lobby: null, es: null, esKey: null, online: false,
   tid: null, tv: null, tvAt: 0, tableMsg: '', pending: null, pre: null, preHid: -1, raise: { open: false, amt: 0 },
-  sheet: null, admin: { tab: 'overview', data: null, filter: '', ledger: null, timer: 0, last: 0, player: null }
+  sheet: null, admin: { tab: 'overview', data: null, filter: '', ledger: null, timer: 0, last: 0, player: null },
+  bj: { st: null, bet: 0, busy: false, revealing: false, dShown: 0, holeOpen: true, walletShown: null, seen: new Set(), timers: [] }
 };
 const NT = { size: 9, turn: 25, blinds: 1, min: 10, max: 125, anteBB: 0.5, fee: 5, capBB: 3, hours: 12, anon: true, rathole: true, auth: true, nfnd: false };
 
@@ -51,6 +52,7 @@ function stream(tid) {
     App.user = Object.assign(App.user || {}, App.lobby.me);
     renderBalances();
     if (App.view === 'lobby') renderLobby();
+    if (App.view === 'bj' && App.bj.st && !App.bj.revealing && !App.bj.busy) { App.bj.st.wallet = App.user.wallet; renderBJ(); }
   });
   es.addEventListener('table', e => { const tv = JSON.parse(e.data); if (tv.id === App.tid) onTable(tv); });
   es.addEventListener('admin', () => loadAdminSoon());
@@ -66,12 +68,13 @@ function stream(tid) {
 /* ---------- Screens & routing ---------- */
 function show(view) {
   App.view = view;
-  for (const v of ['auth', 'lobby', 'table', 'admin']) $('#v-' + v).hidden = v !== view;
+  for (const v of ['auth', 'lobby', 'table', 'admin', 'bj']) $('#v-' + v).hidden = v !== view;
   closeSheet();
   if (view === 'auth') renderAuth();
   if (view === 'lobby') renderLobby();
   if (view === 'table') requestAnimationFrame(() => { computeLayout(); renderTable(); });
   if (view === 'admin') { renderAdminShell(); loadAdmin(); }
+  if (view === 'bj') { renderBJ(); bjLoad(); }
 }
 function go(hash) { if (location.hash !== '#' + hash) location.hash = hash; else route(); }
 function home() { return App.user && App.user.role === 'admin' ? 'admin-' + App.admin.tab : 'lobby'; }
@@ -79,6 +82,7 @@ function route() {
   if (!App.user) return show('auth');
   const h = location.hash.slice(1);
   if (h.startsWith('t-')) return openTable(h.slice(2));
+  if (h === 'bj' && App.user.role === 'player') { App.tid = null; App.tv = null; stream(null); return show('bj'); }
   App.tid = null; App.tv = null;
   stream(null);
   if (App.user.role === 'admin') {
@@ -137,6 +141,8 @@ function renderLobby() {
   renderBalances();
   const L = App.lobby;
   if (!L) { setHTML($('#l-tables'), '<p class="empty">Loading tables…</p>'); return; }
+  setHTML($('#l-casino'), L.casino && L.casino.bjOn ? `<h2 class="sect">Casino</h2>
+    <button class="gcard" data-act="go-bj"><span class="gi">♠</span><span class="gt">Blackjack<small>Pays 3 to 2 · Dealer stands on soft 17</small></span><span class="gp">Play</span></button>` : '');
   setHTML($('#l-tables'), L.tables.length ? L.tables.map(t => tableCardHTML(t)).join('')
     : '<p class="empty">No tables are open right now. The admin opens them.</p>');
 }
@@ -387,6 +393,122 @@ setInterval(() => {
   if (App.pending && Date.now() - App.pending.at > 6000) { App.pending = null; renderDock(); }
 }, 200);
 
+/* ---------- Blackjack ---------- */
+function bjTotal(cards) {
+  let t = 0, aces = 0;
+  for (const c of cards) { if (c < 0) continue; const r = rankOf(c); t += r === 14 ? 11 : r >= 10 ? 10 : r; if (r === 14) aces++; }
+  while (t > 21 && aces) { t -= 10; aces--; }
+  return { t, soft: aces > 0 && t <= 21 };
+}
+async function bjLoad() {
+  try { applyBJ(await api('/api/bj'), true); } catch (e) { toast(e.message); }
+}
+async function bjDo(path, body) {
+  const B = App.bj;
+  if (B.busy || B.revealing) return;
+  B.busy = true; renderBJDock();
+  try { applyBJ(await api(path, body)); }
+  catch (e) { toast(e.message); }
+  finally { B.busy = false; renderBJ(); }
+}
+function applyBJ(st, initial) {
+  const B = App.bj, old = B.st, H = st.hand;
+  B.timers.forEach(clearTimeout); B.timers = [];
+  const wasOpen = old && old.hand && H && old.hand.id === H.id && old.hand.phase !== 'done';
+  const freshDone = H && H.phase === 'done' && !initial && (wasOpen || !old || !old.hand || old.hand.id !== H.id);
+  B.st = st;
+  if (!B.bet) B.bet = st.lastBet || st.min;
+  if (H && H.shuffled && H.id > 1 && !initial && (!old || !old.hand || old.hand.id !== H.id)) toast('New shoe. The cards were shuffled.');
+  if (freshDone) {
+    // Reveal the dealer's hole card, then each drawn card, before showing the result.
+    B.revealing = true; B.holeOpen = false; B.dShown = 2;
+    B.walletShown = old ? old.wallet : null;
+    const steps = [() => { B.holeOpen = true; }];
+    for (let k = 2; k < H.dealer.length; k++) steps.push(() => { B.dShown = k + 1; });
+    steps.push(() => { B.revealing = false; B.walletShown = null; });
+    steps.forEach((fn, i) => B.timers.push(setTimeout(() => { fn(); renderBJ(); }, 450 + i * 600)));
+  } else { B.revealing = false; B.holeOpen = true; B.dShown = H ? H.dealer.length : 0; B.walletShown = null; }
+  renderBJ();
+}
+function bjCard(key, c, extra) {
+  const B = App.bj, isNew = !B.seen.has(key);
+  B.seen.add(key);
+  if (B.seen.size > 400) B.seen = new Set([key]);
+  const cls = (isNew ? 'deal ' : '') + (extra || '');
+  return c < 0 ? `<div class="card back ${cls}"></div>` : cardHTML(c, cls);
+}
+function renderBJ() {
+  if (App.view !== 'bj') return;
+  const B = App.bj, st = B.st, H = st && st.hand;
+  setHTML($('#bj-bal'), st ? `<span class="chip"></span>${money(B.walletShown != null ? B.walletShown : st.wallet)}` : '');
+  $('#bj-meta').textContent = st ? `Bets ${money(st.min)}–${money(st.max)}` : '';
+  if (!H) {
+    setHTML($('#bj-dcards'), ''); $('#bj-dt').textContent = '';
+    setHTML($('#bj-hands'), '<div class="bj-place">Place your bet</div>');
+    setHTML($('#bj-msg'), '');
+    return renderBJDock();
+  }
+  // Dealer
+  let dealer = H.dealer.slice(0, B.revealing ? B.dShown : H.dealer.length);
+  if (B.revealing && !B.holeOpen) dealer = [dealer[0], -1];
+  setHTML($('#bj-dcards'), dealer.map((c, i) => bjCard(`${H.id}:d${i}:${c < 0 ? 'x' : 'o'}`, c)).join(''));
+  const dt = bjTotal(dealer).t;
+  $('#bj-dt').textContent = dt ? String(dt) : '';
+  // Player hands
+  const showRes = H.phase === 'done' && !B.revealing;
+  const RES = { bj: 'Blackjack', win: 'Win', push: 'Push', lose: 'Lose', bust: 'Bust' };
+  $('#bj-hands').classList.toggle('many', H.hands.length > 2);
+  setHTML($('#bj-hands'), H.hands.map((h, k) => {
+    const t = h.soft && h.total < 21 && h.cards.length > 1 ? `${h.total - 10}/${h.total}` : String(h.total);
+    return `<div class="bj-hand ${H.phase === 'player' && k === H.active ? 'on' : ''}">
+      <div class="bj-cards">${h.cards.map((c, i) => bjCard(`${H.id}:h${k}:${i}`, c)).join('')}</div>
+      <div class="meta"><span class="bj-tot">${t}</span><span class="bj-stake"><span class="chip"></span>${money(h.bet)}${h.dbl ? ' ×2' : ''}</span>
+      ${showRes ? `<span class="bj-res ${h.res}">${RES[h.res] || ''}${h.pay > h.bet ? ' +' + money(h.pay - h.bet) : ''}</span>` : ''}</div></div>`;
+  }).join(''));
+  // Message
+  let msg = '';
+  if (H.phase === 'insurance') msg = '<span class="quiet">Dealer shows an Ace</span>';
+  else if (showRes) {
+    const net = H.payout - H.staked;
+    const allBust = H.hands.every(h => h.res === 'bust');
+    if (H.hands.length === 1 && H.hands[0].res === 'bj') msg = `<span class="win">Blackjack! +${money(net)}</span>`;
+    else if (net > 0) msg = `<span class="win">You win ${money(net)}</span>`;
+    else if (net === 0) msg = '<span>Push</span>';
+    else msg = `<span>${H.dealerBJ ? 'Dealer has blackjack' : allBust ? 'Bust' : 'Dealer wins'}</span>`;
+  } else if (B.revealing) msg = '<span class="quiet">Dealer plays…</span>';
+  setHTML($('#bj-msg'), msg);
+  renderBJDock();
+}
+function renderBJDock() {
+  const B = App.bj, st = B.st, H = st && st.hand, dock = $('#bj-dock');
+  if (!st) return setHTML(dock, '<div class="dock-msg">Loading…</div>');
+  if (!st.on) return setHTML(dock, '<div class="dock-msg">Blackjack is closed right now.</div>');
+  if (B.revealing) return setHTML(dock, '<div class="dock-msg">Dealer plays…</div>');
+  if (H && H.phase === 'insurance') {
+    return setHTML(dock, `<div class="dock-msg">Insurance costs ${money(H.insCost)} and pays 2 to 1 if the dealer has blackjack.</div>
+      <div class="acts"><button class="act ghost" data-act="bj-noins" ${B.busy ? 'disabled' : ''}>No thanks</button>
+      <button class="act raise" data-act="bj-ins" ${B.busy || !H.canIns ? 'disabled' : ''}>Insure ${money(H.insCost)}</button></div>`);
+  }
+  if (H && H.phase === 'player') {
+    const dis = B.busy ? 'disabled' : '';
+    return setHTML(dock, `<div class="acts">
+      <button class="act ghost" data-act="bj-stand" ${dis}>Stand</button>
+      <button class="act call" data-act="bj-hit" ${dis}>Hit</button>
+      <button class="act raise" data-act="bj-double" ${dis || (H.canDouble ? '' : 'disabled')}>Double</button>
+      <button class="act raise" data-act="bj-split" ${dis || (H.canSplit ? '' : 'disabled')}>Split</button></div>`);
+  }
+  const wallet = st.wallet, cap = Math.min(st.max, wallet);
+  B.bet = clamp(B.bet, 0, Math.max(0, cap));
+  const chips = [1, 5, 25, 100, 500].map(v => `<button class="bjc" data-act="bj-chip" data-v="${v}" aria-label="Add ${v}" ${B.bet + v * 100 > cap ? 'disabled' : ''}><span>${v}</span></button>`).join('');
+  const canDeal = !B.busy && B.bet >= st.min && B.bet <= cap;
+  setHTML(dock, `<div class="bj-bet"><span class="lab">Bet</span><span class="bj-amt">${money(B.bet)}</span></div>
+    <div class="bj-chips">${chips}</div>
+    <div class="acts"><button class="act ghost" data-act="bj-clear">Clear</button>
+    <button class="act ghost" data-act="bj-rebet" ${st.lastBet && st.lastBet <= cap ? '' : 'disabled'}>Rebet</button>
+    <button class="act raise" data-act="bj-deal" ${canDeal ? '' : 'disabled'}>Deal</button></div>
+    ${wallet < st.min ? '<div class="dock-msg">Your balance is too low to bet. Ask the admin for chips.</div>' : ''}`);
+}
+
 /* ---------- Sheets ---------- */
 function openSheet(kind, html) { App.sheet = kind; $('#sheet').hidden = false; setHTML($('#sheet'), `<div class="sheet-card" role="dialog"><div class="grab"></div>${html}</div>`); }
 function closeSheet() { App.sheet = null; $('#sheet').hidden = true; setHTML($('#sheet'), ''); }
@@ -502,7 +624,7 @@ async function loadAdmin() {
 }
 function renderAdminTabs() {
   const d = App.admin.data, req = d ? d.requests.length : 0;
-  setHTML($('#a-tabs'), [['overview', 'Overview'], ['players', 'Players'], ['cashier', 'Cashier'], ['tables', 'Tables'], ['fees', 'Fees']].map(([k, l]) =>
+  setHTML($('#a-tabs'), [['overview', 'Overview'], ['players', 'Players'], ['cashier', 'Cashier'], ['tables', 'Tables'], ['fees', 'House']].map(([k, l]) =>
     `<button data-act="atab" data-k="${k}" aria-pressed="${App.admin.tab === k}">${l}${k === 'overview' && req ? `<span class="badge">${req}</span>` : ''}</button>`).join(''));
 }
 function renderAdminShell() {
@@ -519,9 +641,10 @@ function renderAdminShell() {
       <h3 class="sect">Players</h3><div id="pl-list" class="list"></div>`,
     cashier: `<div class="tiles" id="cs-tiles"></div>
       <div class="filters" id="cs-filters"></div><div id="cs-list" class="list"></div>`,
-    tables: tableForm() + `<h3 class="sect">Tables</h3><div id="tb-list" class="list"></div>`,
-    fees: `<div class="tiles" id="fe-tiles"></div><div class="panel"><h2>Fees, last 14 days</h2><div class="bars" id="fe-chart"></div></div>
-      <h3 class="sect">Recent hands</h3><div id="fe-recent" class="list"></div>`
+    tables: `<div id="cs-box"></div>` + tableForm() + `<h3 class="sect">Tables</h3><div id="tb-list" class="list"></div>`,
+    fees: `<h3 class="sect">Poker fees</h3><div class="tiles" id="fe-tiles"></div><div class="panel"><h2>Poker fees, last 14 days</h2><div class="bars" id="fe-chart"></div></div>
+      <h3 class="sect">Blackjack</h3><div class="tiles" id="bj-tiles"></div><div class="panel"><h2>Blackjack house result, last 14 days</h2><div class="bars" id="bj-chart"></div></div>
+      <h3 class="sect">Recent poker hands</h3><div id="fe-recent" class="list"></div>`
   }[t];
   setHTML($('#a-body'), body);
   if (t === 'cashier') { renderFilters(); loadLedger(); }
@@ -536,9 +659,10 @@ function fillAdmin() {
         <div class="rt"><b>${esc(r.username)}</b> wants to ${r.kind === 'sit' ? `buy in for <b>${money(r.amount)}</b> (seat ${r.seat + 1})` : `add <b>${money(r.amount)}</b>`} at ${esc(r.label)}</div>
         <div class="note">Balance ${money(r.wallet)} · ${when(r.t)}</div>
         <div class="two"><button class="btn danger sm" data-act="req" data-rid="${esc(r.id)}" data-ok="0">Decline</button><button class="btn green sm" data-act="req" data-rid="${esc(r.id)}" data-ok="1">Approve</button></div></div>`).join('') : '');
-    setHTML($('#ov-tiles'), tile('In player balances', money(T.wallets)) + tile('On tables', money(T.tables)) + tile('Fees today', money(T.today), 'gold') +
-      tile('Fees all time', money(T.rake), 'gold') + tile('Chips issued (net)', money(T.issued)) +
-      `<div class="tile ${T.balanced ? 'ok' : 'no'}"><span class="k">Books</span><span class="v">${T.balanced ? 'Balanced ✓' : 'Mismatch'}</span><span class="k">Issued = balances + tables + fees</span></div>`);
+    setHTML($('#ov-tiles'), tile('In player balances', money(T.wallets)) + tile('On tables', money(T.tables)) + tile('Poker fees today', money(T.today), 'gold') +
+      tile('Poker fees all time', money(T.rake), 'gold') + tile('Blackjack today (house)', signed(T.bjToday), T.bjToday >= 0 ? 'gold' : '') +
+      tile('Blackjack all time (house)', signed(T.bjNet), T.bjNet >= 0 ? 'gold' : '') + tile('Chips issued (net)', money(T.issued)) +
+      `<div class="tile ${T.balanced ? 'ok' : 'no'}"><span class="k">Books</span><span class="v">${T.balanced ? 'Balanced ✓' : 'Mismatch'}</span><span class="k">Issued = balances + tables + fees + casino</span></div>`);
     const open = d.tables.filter(x => x.status === 'open');
     setHTML($('#ov-tables'), open.length ? open.map(adminTableRow).join('') : '<p class="empty">No open tables. Start one in Tables.</p>');
   }
@@ -553,6 +677,13 @@ function fillAdmin() {
     setHTML($('#cs-tiles'), tile('Transferred in', money(T.deposits)) + tile('Withdrawn', money(T.withdrawals)) + tile('In player balances', money(T.wallets)));
   }
   if (t === 'tables') {
+    const C = d.casino;
+    setHTML($('#cs-box'), `<div class="panel"><h2>Blackjack</h2>
+      <div class="set tg"><span class="sl">Blackjack open</span><button type="button" class="switch" role="switch" id="cs-on" aria-checked="${C.bjOn}" aria-label="Blackjack open" data-act="cs-toggle"></button><small>Players see Blackjack in their lobby.</small></div>
+      <div class="set"><span class="sl">Bet limits (min / max)</span><div class="two">
+        <input class="txt" id="cs-min" type="number" inputmode="decimal" step="any" min="0" value="${C.bjMin / 100}" aria-label="Minimum bet">
+        <input class="txt" id="cs-max" type="number" inputmode="decimal" step="any" min="0" value="${C.bjMax / 100}" aria-label="Maximum bet"></div></div>
+      <button class="btn gold" data-act="cs-save">Save blackjack settings</button></div>`);
     setHTML($('#tb-list'), d.tables.length ? d.tables.map(adminTableRow).join('') : '<p class="empty">No tables yet.</p>');
   }
   if (t === 'fees') {
@@ -563,6 +694,12 @@ function fillAdmin() {
       ${x.amt ? `<span class="bv">${money(x.amt)}</span>` : ''}<div class="bar ${x.amt ? '' : 'zero'}" style="height:${Math.max(2, x.amt / max * 100)}%"></div><span class="bl">${x.day.slice(8)}</span></div>`).join(''));
     setHTML($('#fe-recent'), d.rakeRecent.length ? d.rakeRecent.map(r => `<div class="ritem"><span class="a"><span class="nm">${esc(r.label)} · hand #${r.hand}</span></span>
       <span class="b up">+${money(r.fee)}</span><span class="c">${when(r.t)}</span><span class="d">Pot ${money(r.pot)}</span></div>`).join('') : '<p class="empty">No fees yet. They appear here after each hand.</p>');
+    const C = d.casino, net = C.wagered - C.paid;
+    setHTML($('#bj-tiles'), tile('Hands played', C.hands.toLocaleString('en-US')) + tile('Total bet', money(C.wagered)) + tile('Paid to players', money(C.paid)) +
+      tile('House result', signed(net), net >= 0 ? 'gold' : '') + tile('Paid back', C.wagered ? (C.paid / C.wagered * 100).toFixed(1) + '%' : '–'));
+    const bmax = Math.max(1, ...C.days.map(x => Math.abs(x.amt)));
+    setHTML($('#bj-chart'), C.days.map(x => `<div class="bcol" title="${esc(x.day)}: ${signed(x.amt)}">
+      ${x.amt ? `<span class="bv">${signed(x.amt)}</span>` : ''}<div class="bar ${x.amt > 0 ? '' : 'zero'}" style="height:${Math.max(2, Math.abs(x.amt) / bmax * 100)}%"></div><span class="bl">${x.day.slice(8)}</span></div>`).join(''));
   }
 }
 const tile = (k, v, cls) => `<div class="tile ${cls || ''}"><span class="k">${esc(k)}</span><span class="v">${v}</span></div>`;
@@ -598,7 +735,7 @@ function tableForm() {
 }
 function renderFilters() {
   const f = App.admin.filter;
-  setHTML($('#cs-filters'), [['', 'All'], ['deposit', 'Transfers'], ['withdraw', 'Withdrawals'], ['buyin', 'Buy-ins'], ['cashout', 'Cash-outs']].map(([k, l]) =>
+  setHTML($('#cs-filters'), [['', 'All'], ['deposit', 'Transfers'], ['withdraw', 'Withdrawals'], ['buyin', 'Buy-ins'], ['cashout', 'Cash-outs'], ['blackjack', 'Blackjack']].map(([k, l]) =>
     `<button data-act="cs-filter" data-k="${k}" aria-pressed="${f === k}">${l}</button>`).join(''));
 }
 async function loadLedger() {
@@ -691,6 +828,21 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'atab': go('admin-' + b.dataset.k); break;
+    case 'go-bj': go('bj'); break;
+    case 'bj-chip': App.bj.bet += +b.dataset.v * 100; renderBJDock(); break;
+    case 'bj-clear': App.bj.bet = 0; renderBJDock(); break;
+    case 'bj-rebet': App.bj.bet = App.bj.st.lastBet; renderBJDock(); break;
+    case 'bj-deal': bjDo('/api/bj/deal', { bet: App.bj.bet / 100 }); break;
+    case 'bj-hit': bjDo('/api/bj/act', { a: 'hit' }); break;
+    case 'bj-stand': bjDo('/api/bj/act', { a: 'stand' }); break;
+    case 'bj-double': bjDo('/api/bj/act', { a: 'double' }); break;
+    case 'bj-split': bjDo('/api/bj/act', { a: 'split' }); break;
+    case 'bj-ins': bjDo('/api/bj/act', { a: 'ins' }); break;
+    case 'bj-noins': bjDo('/api/bj/act', { a: 'noins' }); break;
+    case 'cs-toggle': b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true')); break;
+    case 'cs-save':
+      adminDo('/api/admin/casino', { bjOn: $('#cs-on').getAttribute('aria-checked') === 'true', bjMin: $('#cs-min').value, bjMax: $('#cs-max').value }, 'Blackjack settings saved');
+      break;
     case 'req': adminDo('/api/admin/requests/decide', { rid: b.dataset.rid, ok: b.dataset.ok === '1' }, b.dataset.ok === '1' ? 'Approved' : 'Declined'); break;
     case 'player': playerSheet(b.dataset.uid); break;
     case 'p-send': {

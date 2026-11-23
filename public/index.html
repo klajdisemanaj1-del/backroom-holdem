@@ -43,7 +43,8 @@
     </header>
     <div class="scroll">
       <div class="inner">
-        <h2 class="sect">Tables</h2>
+        <div id="l-casino" class="list"></div>
+        <h2 class="sect">Poker tables</h2>
         <div id="l-tables" class="list"></div>
       </div>
     </div>
@@ -64,6 +65,23 @@
       <div class="dealer" id="dealer" hidden>D</div>
     </div>
     <div id="dock"></div>
+  </section>
+
+  <section id="v-bj" class="screen" hidden>
+    <header class="bar">
+      <button class="icon" data-act="back" aria-label="Back">‹</button>
+      <div class="tinfo"><span class="code">Blackjack</span><span class="meta" id="bj-meta"></span></div>
+      <span class="bal" id="bj-bal"></span>
+    </header>
+    <div id="bj-arena">
+      <div class="bj-felt">
+        <div class="bj-zone"><div class="bj-lab">Dealer <span class="bj-tot" id="bj-dt"></span></div><div class="bj-cards" id="bj-dcards"></div></div>
+        <div class="bj-rules"><b>Blackjack pays 3 to 2</b><span>Dealer stands on soft 17 · Insurance pays 2 to 1</span></div>
+        <div class="bj-msg" id="bj-msg"></div>
+        <div class="bj-hands" id="bj-hands"></div>
+      </div>
+    </div>
+    <div id="bj-dock"></div>
   </section>
 
   <section id="v-admin" class="screen" hidden>

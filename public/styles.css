@@ -378,3 +378,78 @@ button.ritem:hover { border-color: #4a3d41; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 .note:empty { display: none; }
+
+/* ---------- Casino entry in the lobby ---------- */
+.gcard {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; text-align: left; width: 100%;
+  padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); border-left: 3px solid var(--red);
+  background: radial-gradient(120% 140% at 0% 0%, rgba(232,41,63,.22), transparent 55%), linear-gradient(135deg, #1a1416, #0f0d0f);
+}
+.gcard .gi { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; background: #0b0a0c; border: 1px solid #3a3336; }
+.gcard .gt { font-family: var(--num); font-weight: 700; font-size: 22px; letter-spacing: .03em; display: grid; }
+.gcard .gt small { font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted); letter-spacing: 0; }
+.gcard .gp { font-family: var(--num); font-weight: 700; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--red); color: #ff4d61; }
+
+/* ---------- Blackjack table ---------- */
+#v-bj { background: radial-gradient(90% 60% at 50% 30%, #22090e 0%, var(--room) 72%); }
+#bj-arena { flex: 1; min-height: 0; padding: 10px 10px 0; display: flex; }
+.bj-felt {
+  flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 18px 12px 30px; border-radius: 22px 22px 50% 50% / 22px 22px 20% 20%;
+  background:
+    radial-gradient(ellipse 65% 45% at 50% 40%, rgba(255,90,100,.2) 0%, transparent 70%),
+    repeating-linear-gradient(45deg, rgba(0,0,0,.09) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(-45deg, rgba(0,0,0,.09) 0 1px, transparent 1px 18px),
+    radial-gradient(ellipse 80% 70% at 50% 35%, #b5172c 0%, var(--felt) 45%, var(--felt-deep) 100%);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3), inset 0 0 0 9px #120f11, inset 0 0 0 10.5px rgba(255,255,255,.14), inset 0 0 70px rgba(0,0,0,.6), 0 20px 50px rgba(0,0,0,.6);
+}
+.bj-zone { display: grid; justify-items: center; gap: 8px; }
+.bj-lab { font-family: var(--num); font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.75); display: flex; align-items: center; gap: 8px; }
+.bj-tot { display: inline-grid; place-items: center; min-width: 30px; padding: 2px 8px; border-radius: 99px; background: rgba(0,0,0,.65); color: #fff; font-size: 15px; letter-spacing: .02em; }
+.bj-tot:empty { display: none; }
+.bj-cards { display: flex; min-height: calc(clamp(52px, 15vw, 66px) * 1.4); }
+.bj-cards .card { --cw: clamp(52px, 15vw, 66px); }
+.bj-cards .card + .card { margin-left: calc(clamp(52px, 15vw, 66px) * -.42); }
+.bj-rules { display: grid; justify-items: center; gap: 3px; text-align: center; pointer-events: none; }
+.bj-rules b { font-family: var(--display); font-weight: 400; font-size: clamp(17px, 5.4vw, 24px); color: rgba(0,0,0,.4); text-shadow: 0 1px 0 rgba(255,255,255,.09); letter-spacing: .03em; }
+.bj-rules span { font-family: var(--num); font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.45); }
+.bj-msg { min-height: 34px; display: grid; place-items: center; }
+.bj-msg span { font-family: var(--num); font-weight: 700; font-size: 20px; letter-spacing: .05em; padding: 5px 16px; border-radius: 99px; background: rgba(0,0,0,.7); box-shadow: 0 6px 20px rgba(0,0,0,.5); animation: pop .3s ease-out both; }
+.bj-msg span.win { background: linear-gradient(#ff4a5e, #b3121f); }
+.bj-msg span.quiet { font-weight: 600; font-size: 15px; color: #f1e3e5; }
+@keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+.bj-hands { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 16px; min-height: 150px; }
+.bj-hand { display: grid; justify-items: center; gap: 6px; padding: 8px 8px 6px; border-radius: 14px; border: 1.5px solid transparent; transition: border-color .2s, background .2s; }
+.bj-hand.on { border-color: rgba(255,255,255,.7); background: rgba(0,0,0,.18); }
+.bj-hand .bj-cards { min-height: 0; }
+.bj-hand .bj-cards .card { --cw: clamp(48px, 14vw, 62px); }
+.bj-hands.many .bj-hand .bj-cards .card { --cw: clamp(38px, 10.5vw, 50px); }
+.bj-hand .bj-cards .card + .card { margin-left: calc(var(--cw) * -.5); margin-top: calc(var(--cw) * -.14); }
+.bj-hand .meta { display: flex; gap: 6px; align-items: center; }
+.bj-stake { display: flex; align-items: center; gap: 4px; font-family: var(--num); font-weight: 700; font-size: 14px; background: rgba(0,0,0,.6); padding: 2px 9px 2px 3px; border-radius: 99px; font-variant-numeric: tabular-nums; }
+.bj-res { font-family: var(--num); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: #1b1819; color: #9d9497; }
+.bj-res.win, .bj-res.bj { background: #f5f0f0; color: #111; }
+.bj-res.push { background: #3a3437; color: #fff; }
+.bj-place { font-family: var(--num); font-size: 15px; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.55); border: 1.5px dashed rgba(255,255,255,.3); border-radius: 14px; padding: 26px 22px; }
+
+#bj-dock { flex: none; background: linear-gradient(#141214, #09080a); border-top: 1px solid #251f22; padding: 10px 12px 14px; min-height: 118px; display: grid; gap: 10px; align-content: center; }
+.bj-bet { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+.bj-bet .lab { font-family: var(--num); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.bj-amt { font-family: var(--num); font-weight: 700; font-size: 30px; font-variant-numeric: tabular-nums; }
+.bj-chips { display: flex; justify-content: center; gap: 8px; }
+.bjc {
+  width: 50px; height: 50px; border-radius: 50%; position: relative; font-family: var(--num); font-weight: 700; font-size: 15px; color: #fff;
+  border: 0; background: radial-gradient(circle, var(--cc) 0 52%, transparent 53%), repeating-conic-gradient(var(--cc) 0 22.5deg, #f5f0f0 22.5deg 45deg);
+  box-shadow: inset 0 0 0 3px rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.55);
+}
+.bjc span { position: relative; z-index: 1; }
+.bjc::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; border: 1.5px dashed rgba(255,255,255,.55); }
+.bjc[data-v="1"] { --cc: #6d6568; } .bjc[data-v="5"] { --cc: #c41a30; } .bjc[data-v="25"] { --cc: #141214; }
+.bjc[data-v="100"] { --cc: #3c4a63; } .bjc[data-v="500"] { --cc: #7a0b1a; }
+.bjc:disabled { opacity: .3; }
+.act:disabled { opacity: .3; cursor: not-allowed; }
+/* Blackjack cards overlap, so show the rank and suit in the top-left corner like real cards */
+.bj-cards .card { align-items: flex-start; justify-content: flex-start; gap: 0; padding: calc(var(--cw) * .07) calc(var(--cw) * .1); }
+.bj-cards .card b { font-size: calc(var(--cw) * .42); }
+.bj-cards .card i { font-size: calc(var(--cw) * .34); margin-left: 1px; }
+.bj-cards .card.back { padding: 0; }
