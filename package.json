@@ -1,0 +1,10 @@
+{
+  "name": "backroom-holdem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "No-Limit Hold'em club: server-side dealer, admin-created accounts, chip cashier and house fee.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}

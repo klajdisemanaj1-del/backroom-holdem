@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Backroom Hold'em</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=Limelight&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app">
+  <section id="v-auth" class="screen" hidden>
+    <div class="scroll">
+      <div class="auth-wrap">
+        <header class="brand">
+          <div class="suits">♠ <span class="r">♥</span> <span class="r">♦</span> ♣</div>
+          <h1>Backroom Hold'em</h1>
+          <p id="auth-sub">No-Limit Texas Hold'em. Members only.</p>
+        </header>
+        <form id="auth-form" class="panel" autocomplete="on">
+          <h2 id="auth-title">Log in</h2>
+          <div class="field"><label class="lab" for="a-user">Username</label>
+            <input id="a-user" class="txt" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+          <div class="field"><label class="lab" for="a-pass">Password</label>
+            <input id="a-pass" class="txt" type="password" autocomplete="current-password" required></div>
+          <button class="btn gold" type="submit" id="a-go">Log in</button>
+          <p class="note" id="auth-note">Accounts are created by the club admin.</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="v-lobby" class="screen" hidden>
+    <header class="bar">
+      <div class="brand-sm">Backroom Hold'em</div>
+      <span class="spacer"></span>
+      <span class="bal" id="l-bal"></span>
+      <button class="icon" data-act="account" aria-label="My account">☰</button>
+    </header>
+    <div class="scroll">
+      <div class="inner">
+        <h2 class="sect">Tables</h2>
+        <div id="l-tables" class="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="v-table" class="screen" hidden>
+    <header class="bar">
+      <button class="icon" data-act="back" aria-label="Back">‹</button>
+      <div class="tinfo"><span class="code" id="t-label"></span><span class="meta" id="t-meta"></span></div>
+      <span id="t-badge"></span>
+      <button class="icon" data-act="tablemenu" aria-label="Table menu">☰</button>
+    </header>
+    <div id="arena">
+      <div class="felt" id="felt"><div class="rail"></div><div class="baize"><div class="emboss">Backroom</div></div></div>
+      <div id="bets"></div>
+      <div id="center"><div id="pot"></div><div id="board"></div><div id="banner"></div></div>
+      <div id="seats"></div>
+      <div class="dealer" id="dealer" hidden>D</div>
+    </div>
+    <div id="dock"></div>
+  </section>
+
+  <section id="v-admin" class="screen" hidden>
+    <header class="bar">
+      <div class="brand-sm">Club admin</div>
+      <span class="spacer"></span>
+      <button class="icon" data-act="account" aria-label="My account">☰</button>
+    </header>
+    <nav class="tabs" id="a-tabs" aria-label="Admin sections"></nav>
+    <div class="scroll" id="a-scroll"><div class="inner" id="a-body"></div></div>
+  </section>
+
+  <div id="sheet" class="sheet" hidden></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
